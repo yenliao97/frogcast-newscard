@@ -40,11 +40,12 @@ THEMES = ["chip", "shipping", "coastguard", "air", "table", "podium", "document"
 VARIANTS = {"cable": ["a"], "energy": ["a"], "shipping": ["b"]}
 FRAMED = {"table"}
 ART_STYLE = "width:330px;left:70px;bottom:80px"
-FRAMED_STYLE = ("width:330px;height:330px;object-fit:cover;left:70px;bottom:80px;"
+FRAMED_STYLE = ("width:310px;height:310px;object-fit:cover;left:70px;bottom:104px;"
                 "border-radius:28px;box-shadow:0 8px 22px rgba(51,51,47,.16)")
 POSES = ["angry", "announce", "cheerful", "confused", "idea", "neutral", "pointing", "surprised"]
 # 字數上限：照 sc02 那張的字量抓，超過就不會是一次到位的版面
-LIMITS = {"big": 24, "title": 70, "body": 380, "kapa_line": 100, "source": 48, "ig_caption": 1500}
+# 2026-10-09 邊界測試：title 70／body 380／kapa_line 100 全滿時縮到 31px 還是壓到插畫 → 收緊到「全滿也排得下」
+LIMITS = {"big": 24, "title": 60, "body": 320, "kapa_line": 80, "source": 48, "ig_caption": 1500}
 BODY_SIZES = [37, 35, 33, 31]   # 放不下就一級一級縮，縮到 31 還放不下就失敗，不硬塞
 BANNED = ["—", "我發現"]   # 破折號、假裝親身經歷：Yen 一眼就抓到的 AI 味
 
