@@ -97,7 +97,7 @@ def build_spec(c, body_size, art_w, big_size):
     body += f"<br><br>🐸 <b>Kapa</b>: {e(c['kapa_line'])}"
     style = (FRAMED_STYLE if c["theme"] in FRAMED else ART_STYLE).format(w=art_w if c["theme"] not in FRAMED else art_w - 20)
     return {"bg": "render/bg/pond-portrait.jpg", "wash": 0.25, "body_font": "Lexend", "cards": [{
-        "type": "fact", "big": c["big"], "big_style": f"font-size:{big_size}px;line-height:1.0;white-space:nowrap",
+        "type": "fact", "big": c["big"], "big_style": f"font-size:{big_size}px;line-height:1.0;white-space:nowrap;max-width:840px",  # 右上 icon 要留位置
         "title": e(c["title"]), "body": body, "body_style": f"max-width:900px;font-size:{body_size}px",
         "elements": [{"src": f"art/library/{c['theme']}_{art_variant(c)}.png", "style": style}],
         "kapa": {"src": f"art/kapa/kapa-{c['kapa']}.png", "style": "width:280px;right:70px;bottom:70px"},
