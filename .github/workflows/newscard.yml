@@ -1,0 +1,79 @@
+# 外媒搬運 5🐸 自動圖卡。雲端 routine 把規格 push 到 queue/ 就會跑；失敗時 GitHub 寄信給 Yen，草稿維持純文字。
+# 手動跑（Actions → newscard → Run workflow）：selftest 驗金鑰；render-example 用 examples/ 出圖、不碰 Buffer。
+name: newscard
+
+on:
+  push:
+    paths: ["queue/*.json"]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "selftest / render-example"
+        required: true
+        default: selftest
+        type: choice
+        options: [selftest, render-example]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: newscard
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install renderer
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q fonts-noto-color-emoji
+          pip install -q playwright==1.47.0 pillow==10.4.0
+          python -m playwright install --with-deps chromium
+
+      - name: Selftest
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'selftest'
+        run: python newscard.py selftest
+
+      - name: Render examples
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'render-example'
+        run: |
+          for f in examples/*.json; do python newscard.py render "$f" out/; done
+
+      - name: Process queue
+        if: github.event_name == 'push'
+        run: |
+          shopt -s nullglob
+          files=(queue/*.json)
+          if [ ${#files[@]} -eq 0 ]; then echo "queue 是空的"; exit 0; fi
+          for f in "${files[@]}"; do python newscard.py process "$f"; done
+
+      - name: Commit done/
+        if: github.event_name == 'push'
+        run: |
+          git config user.name "newscard-bot"
+          git config user.email "newscard-bot@users.noreply.github.com"
+          git add -A queue done
+          git diff --cached --quiet || git commit -m "newscard: processed $(ls done | wc -l | tr -d ' ') total"
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: Upload card images
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.mode == 'render-example'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cards
+          path: out/
+          if-no-files-found: ignore
