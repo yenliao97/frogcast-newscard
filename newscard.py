@@ -48,7 +48,7 @@ POSES = ["angry", "announce", "cheerful", "confused", "idea", "neutral", "pointi
 LIMITS = {"big": 24, "title": 60, "body": 320, "kapa_line": 80, "source": 48, "ig_caption": 1500}
 # 放不下時的讓步順序：先縮內文，再縮左下插畫；全部用完還放不下就失敗，不硬塞。(內文 px, 插畫寬 px)
 FIT_STEPS = [(37, 330), (35, 330), (33, 330), (33, 280), (31, 280), (31, 240)]
-BIG_SIZES = [92, 80, 68]         # 大字一定一行；92px 放不下就縮，68px 還放不下才退件
+BIG_SIZES = [92, 80, 68, 58]     # 大字一定一行；92px 放不下就縮，58px 還放不下才退件（24 字全大寫要到 58）
 BANNED = ["—", "我發現"]   # 破折號、假裝親身經歷：Yen 一眼就抓到的 AI 味
 
 
