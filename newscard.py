@@ -39,14 +39,16 @@ THEMES = ["chip", "shipping", "coastguard", "air", "table", "podium", "document"
 # table 兩張都是滿版會議桌，去不了背 → 用圓角相框放（FRAMED）。
 VARIANTS = {"cable": ["a"], "energy": ["a"], "shipping": ["b"]}
 FRAMED = {"table"}
-ART_STYLE = "width:330px;left:70px;bottom:80px"
-FRAMED_STYLE = ("width:310px;height:310px;object-fit:cover;left:70px;bottom:104px;"
+ART_STYLE = "width:{w}px;left:70px;bottom:80px"
+FRAMED_STYLE = ("width:{w}px;height:{w}px;object-fit:cover;left:70px;bottom:104px;"
                 "border-radius:28px;box-shadow:0 8px 22px rgba(51,51,47,.16)")
 POSES = ["angry", "announce", "cheerful", "confused", "idea", "neutral", "pointing", "surprised"]
 # 字數上限：照 sc02 那張的字量抓，超過就不會是一次到位的版面
 # 2026-10-09 邊界測試：title 70／body 380／kapa_line 100 全滿時縮到 31px 還是壓到插畫 → 收緊到「全滿也排得下」
 LIMITS = {"big": 24, "title": 60, "body": 320, "kapa_line": 80, "source": 48, "ig_caption": 1500}
-BODY_SIZES = [37, 35, 33, 31]   # 放不下就一級一級縮，縮到 31 還放不下就失敗，不硬塞
+# 放不下時的讓步順序：先縮內文，再縮左下插畫；全部用完還放不下就失敗，不硬塞。(內文 px, 插畫寬 px)
+FIT_STEPS = [(37, 330), (35, 330), (33, 330), (33, 280), (31, 280), (31, 240)]
+BIG_SIZES = [92, 80, 68]         # 大字一定一行；92px 放不下就縮，68px 還放不下才退件
 BANNED = ["—", "我發現"]   # 破折號、假裝親身經歷：Yen 一眼就抓到的 AI 味
 
 
@@ -87,17 +89,17 @@ def art_variant(c):
     return v if v in ok else ok[0]
 
 
-def build_spec(c, body_size):
+def build_spec(c, body_size, art_w, big_size):
     e = html.escape
     body = e(c["body"])
     if c.get("highlight"):
         body = body.replace(e(c["highlight"]), f"<span class='hl'>{e(c['highlight'])}</span>", 1)
     body += f"<br><br>🐸 <b>Kapa</b>: {e(c['kapa_line'])}"
+    style = (FRAMED_STYLE if c["theme"] in FRAMED else ART_STYLE).format(w=art_w if c["theme"] not in FRAMED else art_w - 20)
     return {"bg": "render/bg/pond-portrait.jpg", "wash": 0.25, "body_font": "Lexend", "cards": [{
-        "type": "fact", "big": c["big"], "big_style": "font-size:92px;line-height:1.0",
+        "type": "fact", "big": c["big"], "big_style": f"font-size:{big_size}px;line-height:1.0;white-space:nowrap",
         "title": e(c["title"]), "body": body, "body_style": f"max-width:900px;font-size:{body_size}px",
-        "elements": [{"src": f"art/library/{c['theme']}_{art_variant(c)}.png",
-                      "style": FRAMED_STYLE if c["theme"] in FRAMED else ART_STYLE}],
+        "elements": [{"src": f"art/library/{c['theme']}_{art_variant(c)}.png", "style": style}],
         "kapa": {"src": f"art/kapa/kapa-{c['kapa']}.png", "style": "width:280px;right:70px;bottom:70px"},
         "source": c["source"]}]}
 
@@ -107,24 +109,37 @@ def build_spec(c, body_size):
 MEASURE = """() => {
   const r = s => document.querySelector(s).getBoundingClientRect();
   const fact = r('.fact'), big = document.querySelector('.fact .big');
-  const tops = [...document.querySelectorAll('.element, .kapa')].map(x => x.getBoundingClientRect().top);
+  const art = [...document.querySelectorAll('.element, .kapa')].map(x => {
+    const b = x.getBoundingClientRect(); return {src: x.getAttribute('src'), top: b.top, height: b.height};
+  });
   const imgs = [...document.images].filter(i => !i.complete || i.naturalWidth === 0).map(i => i.src);
-  return {factBottom: fact.bottom, artTop: Math.min(...tops), bigOverflow: big.scrollWidth > big.clientWidth + 1,
+  return {factBottom: fact.bottom, art, bigOverflow: big.scrollWidth > big.clientWidth + 1,
           broken: imgs, fonts: [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family)};
 }"""
 
 
+def clear_top(src):
+    """圖片上方完全透明的比例（0–1）。不透明的圖（相框版）是 0。"""
+    from PIL import Image
+    im = Image.open(src.replace("file://", ""))
+    if im.mode != "RGBA":
+        return 0.0
+    box = im.getchannel("A").point(lambda v: 255 if v > 24 else 0).getbbox()
+    return box[1] / im.height if box else 0.0
+
+
 def render(c, out_jpg):
-    """排版、量尺寸、截圖。回傳實際用的內文字級。量到放不下就換小一級，全部放不下就失敗。"""
+    """排版、量尺寸、截圖。回傳 (內文 px, 插畫寬 px, 大字 px)。照 FIT_STEPS 一步步讓，全部用完還放不下就失敗。"""
     from playwright.sync_api import sync_playwright
     from PIL import Image
     work = tempfile.mkdtemp(prefix="newscard-")
     with sync_playwright() as p:
         browser = p.chromium.launch(args=["--allow-file-access-from-files"])
         page = browser.new_page(viewport={"width": W, "height": H})
-        for size in BODY_SIZES:
-            spec = build_spec(c, size)
-            h = os.path.join(work, f"card-{size}.html")
+
+        def load(size, art_w, big):
+            spec = build_spec(c, size, art_w, big)
+            h = os.path.join(work, f"card-{size}-{art_w}-{big}.html")
             open(h, "w", encoding="utf-8").write(card_html(spec["cards"][0], 1, 1, spec, HERE))
             page.goto("file://" + h, wait_until="networkidle")
             page.evaluate("document.fonts.ready")
@@ -133,10 +148,17 @@ def render(c, out_jpg):
                 die(f"圖片載不到：{m['broken']}")
             if "Lexend" not in m["fonts"] or "Fraunces" not in m["fonts"]:
                 die(f"字型沒載到（{m['fonts']}），不能用備用字型出圖")
-            if m["bigOverflow"]:
-                die(f"大字「{c['big']}」超出一行寬度，請縮短")
-            gap = m["artTop"] - m["factBottom"]
-            print(f"內文 {size}px：文字底 {m['factBottom']:.0f}，插畫頂 {m['artTop']:.0f}，間距 {gap:.0f}")
+            return m
+
+        big = next((b for b in BIG_SIZES if not load(*FIT_STEPS[0], b)["bigOverflow"]), None)
+        if big is None:
+            die(f"大字「{c['big']}」縮到 {BIG_SIZES[-1]}px 還是超過一行，請縮短")
+        for size, art_w in FIT_STEPS:
+            m = load(size, art_w, big)
+            # 插畫頂 = 外框頂 + 圖上方透明留白（Kapa 圖頭上空一大塊，用外框量會太保守）
+            art_top = min(a["top"] + a["height"] * clear_top(a["src"]) for a in m["art"])
+            gap = art_top - m["factBottom"]
+            print(f"大字 {big}px｜內文 {size}px｜插畫 {art_w}px：文字底 {m['factBottom']:.0f}，插畫頂 {art_top:.0f}，間距 {gap:.0f}")
             if gap >= 24:
                 png = os.path.join(work, "card.png")
                 page.screenshot(path=png)
@@ -145,9 +167,9 @@ def render(c, out_jpg):
                 im = Image.open(out_jpg)
                 if im.size != (W, H):
                     die(f"輸出尺寸 {im.size}，不是 {W}x{H}")
-                return size
+                return size, art_w, big
         browser.close()
-    die(f"內文縮到 {BODY_SIZES[-1]}px 還是壓到插畫，請縮短 body 或 kapa_line")
+    die(f"內文縮到 {FIT_STEPS[-1][0]}px、插畫縮到 {FIT_STEPS[-1][1]}px 還是壓到插畫，請縮短 body 或 kapa_line")
 
 
 # ---------- R2（S3 API） ----------
@@ -276,8 +298,8 @@ def cmd_render(path, outdir):
     c = load(path)
     os.makedirs(outdir, exist_ok=True)
     out = os.path.join(outdir, os.path.splitext(os.path.basename(path))[0] + ".jpg")
-    size = render(c, out)
-    print(f"🖼  {out}（內文 {size}px）")
+    size, art_w, big = render(c, out)
+    print(f"🖼  {out}（大字 {big}px｜內文 {size}px｜插畫 {art_w}px）")
 
 
 def cmd_process(path):
@@ -287,7 +309,7 @@ def cmd_process(path):
     check_target(th, "threads")
     check_target(x, "twitter")
     out = os.path.join(tempfile.mkdtemp(), "01.jpg")
-    size = render(c, out)
+    size, art_w, big = render(c, out)
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S")
     url = upload(out, f"frogcast/news/{c['threads_id']}-{stamp}/01.jpg")
     print(f"已上傳：{url}")
@@ -295,7 +317,7 @@ def cmd_process(path):
     x2 = attach(x, "twitter", url)
     ig = create_ig(c["ig_caption"], x["dueAt"], url)
     done = os.path.join(HERE, "done", os.path.basename(path))
-    c["result"] = {"image": url, "body_px": size, "threads": th2["id"], "x": x2["id"], "instagram": ig["id"],
+    c["result"] = {"image": url, "layout": {"big_px": big, "body_px": size, "art_px": art_w}, "threads": th2["id"], "x": x2["id"], "instagram": ig["id"],
                    "instagram_due": ig["dueAt"], "done_at": dt.datetime.now(dt.timezone.utc).isoformat()}
     json.dump(c, open(done, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     os.remove(path)
