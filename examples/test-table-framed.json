@@ -1,0 +1,13 @@
+{
+ "threads_id": "EXAMPLE-not-a-real-post",
+ "x_id": "EXAMPLE-not-a-real-post",
+ "big": "Layout test",
+ "title": "Framed art test: the table theme has no cutout.",
+ "body": "This example only checks the layout. The table illustrations are full scenes, so the card shows them inside a rounded frame instead of cutting them out. Nothing here is a real news claim.",
+ "kapa_line": "Checking the frame, not the news.",
+ "theme": "table",
+ "variant": "b",
+ "kapa": "neutral",
+ "source": "Layout test, not for publishing",
+ "ig_caption": "Layout test, not for publishing."
+}

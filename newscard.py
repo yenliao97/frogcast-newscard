@@ -35,6 +35,13 @@ CHANNELS = {"threads": "6aa6f2d6ea19ca0bde374291", "twitter": "6aa6f457ea19ca0bd
 
 THEMES = ["chip", "shipping", "coastguard", "air", "table", "podium", "document",
           "infowar", "cable", "energy", "islandchain", "handshake"]
+# 2026-10-09 去背檢查：shipping_a 去背後滿畫面白點、cable_b／energy_b 是滿版場景 → 已從 repo 拿掉，固定用另一版。
+# table 兩張都是滿版會議桌，去不了背 → 用圓角相框放（FRAMED）。
+VARIANTS = {"cable": ["a"], "energy": ["a"], "shipping": ["b"]}
+FRAMED = {"table"}
+ART_STYLE = "width:330px;left:70px;bottom:80px"
+FRAMED_STYLE = ("width:330px;height:330px;object-fit:cover;left:70px;bottom:80px;"
+                "border-radius:28px;box-shadow:0 8px 22px rgba(51,51,47,.16)")
 POSES = ["angry", "announce", "cheerful", "confused", "idea", "neutral", "pointing", "surprised"]
 # 字數上限：照 sc02 那張的字量抓，超過就不會是一次到位的版面
 LIMITS = {"big": 24, "title": 70, "body": 380, "kapa_line": 100, "source": 48, "ig_caption": 1500}
@@ -73,6 +80,12 @@ def validate(c):
     return errs
 
 
+def art_variant(c):
+    """要的那一版不能用，就換成能用的那一版（不失敗：這不是規格寫錯，是素材庫的限制）。"""
+    v, ok = c.get("variant", "a"), VARIANTS.get(c["theme"], ["a", "b"])
+    return v if v in ok else ok[0]
+
+
 def build_spec(c, body_size):
     e = html.escape
     body = e(c["body"])
@@ -82,8 +95,8 @@ def build_spec(c, body_size):
     return {"bg": "render/bg/pond-portrait.jpg", "wash": 0.25, "body_font": "Lexend", "cards": [{
         "type": "fact", "big": c["big"], "big_style": "font-size:92px;line-height:1.0",
         "title": e(c["title"]), "body": body, "body_style": f"max-width:900px;font-size:{body_size}px",
-        "elements": [{"src": f"art/library/{c['theme']}_{c.get('variant', 'a')}.png",
-                      "style": "width:330px;left:70px;bottom:80px"}],
+        "elements": [{"src": f"art/library/{c['theme']}_{art_variant(c)}.png",
+                      "style": FRAMED_STYLE if c["theme"] in FRAMED else ART_STYLE}],
         "kapa": {"src": f"art/kapa/kapa-{c['kapa']}.png", "style": "width:280px;right:70px;bottom:70px"},
         "source": c["source"]}]}
 

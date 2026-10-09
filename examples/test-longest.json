@@ -1,0 +1,13 @@
+{
+ "threads_id": "EXAMPLE-not-a-real-post",
+ "x_id": "EXAMPLE-not-a-real-post",
+ "big": "Twenty-four characters",
+ "title": "Longest-allowed title test so the layout is checked at the very limit.",
+ "body": "This example fills every field close to its limit to check that the renderer shrinks the body text before it touches the illustration, and fails cleanly when it cannot. The shipping theme asks for variant a, which was removed, so it should fall back to variant b without failing. Nothing in this card is a real news claim and it must never be published anywhere.",
+ "kapa_line": "If this fits at the limit, every shorter card will fit too. That is the point of the test.",
+ "theme": "shipping",
+ "variant": "a",
+ "kapa": "surprised",
+ "source": "Layout test, not for publishing",
+ "ig_caption": "Layout test, not for publishing."
+}

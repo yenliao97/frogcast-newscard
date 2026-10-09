@@ -51,7 +51,7 @@ jobs:
       - name: Render examples
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'render-example'
         run: |
-          for f in examples/*.json; do python newscard.py render "$f" out/; done
+          for f in examples/*.json; do echo "== $f"; python newscard.py render "$f" out/ || echo "!! $f 失敗"; done
 
       - name: Process queue
         if: github.event_name == 'push'
